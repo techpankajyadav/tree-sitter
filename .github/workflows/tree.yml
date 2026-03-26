@@ -97,5 +97,5 @@ jobs:
           tag_name: "latest"
           name: "Latest Parsers"
           prerelease: true
-          files: tree-sitter-${{ matrix.language }}.${{ matrix.os_config.ext }}
+          files: tree-sitter-${{ matrix.grammar.lang }}.${{ matrix.os_config.ext }}
       
