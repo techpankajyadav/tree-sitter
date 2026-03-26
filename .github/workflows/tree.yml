@@ -1,0 +1,65 @@
+name: Build and Release Parsers
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.language }} on ${{ matrix.os_config.os_name }}
+    runs-on: ${{ matrix.os_config.os }}
+    strategy:
+      # This matrix creates a cross-product. 
+      # 5 languages * 3 OS configurations = 15 parallel build jobs!
+      matrix:
+        # 1. ADD OR REMOVE YOUR LANGUAGES HERE
+        language: [json, python, javascript, rust, go, java]
+        
+        # 2. The OS configurations
+        os_config:
+          - { os: ubuntu-latest, os_name: linux,   ext: so,    compiler: gcc,   flags: "-shared -fPIC -O2" }
+          - { os: macos-latest,  os_name: macos,   ext: dylib, compiler: clang, flags: "-dynamiclib -O2" }
+          - { os: windows-latest,os_name: windows, ext: dll,   compiler: gcc,   flags: "-shared -O2" }
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Download the source code for the specific language directly from the tree-sitter organization
+      - name: Clone Language Grammar
+        run: git clone https://github.com/tree-sitter/tree-sitter-${{ matrix.language }}.git
+
+      # Compile the parser, automatically checking if a custom scanner exists
+      - name: Compile Parser
+        shell: bash
+        run: |
+          cd tree-sitter-${{ matrix.language }}
+          
+          # Start building the compile command
+          CMD="${{ matrix.os_config.compiler }} ${{ matrix.os_config.flags }} -I./src src/parser.c"
+          
+          # If the language uses a C scanner, add it to the command
+          if [ -f "src/scanner.c" ]; then
+            echo "Found scanner.c, adding to build..."
+            CMD="$CMD src/scanner.c"
+          fi
+          
+          # If the language uses a C++ scanner, add it and link the C++ standard library
+          if [ -f "src/scanner.cc" ]; then
+            echo "Found scanner.cc, adding to build..."
+            CMD="$CMD src/scanner.cc -lstdc++"
+          fi
+          
+          # Define the final output file name (e.g., tree-sitter-python.so)
+          OUTPUT_FILE="../tree-sitter-${{ matrix.language }}.${{ matrix.os_config.ext }}"
+          CMD="$CMD -o $OUTPUT_FILE"
+          
+          echo "Executing: $CMD"
+          eval $CMD
+
+      # Upload the finished file to your GitHub Release
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tree-sitter-${{ matrix.language }}.${{ matrix.os_config.ext }}
