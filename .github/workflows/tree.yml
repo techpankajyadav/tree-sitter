@@ -3,7 +3,8 @@ name: Build and Release Parsers
 on:
   push:
 
-
+permissions:
+  contents: write
 jobs:
   build:
     name: Build ${{ matrix.language }} on ${{ matrix.os_config.os_name }}
