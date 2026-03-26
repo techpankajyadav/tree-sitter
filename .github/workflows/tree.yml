@@ -2,8 +2,7 @@ name: Build and Release Parsers
 
 on:
   push:
-    tags:
-      - 'v*'
+
 
 jobs:
   build:
