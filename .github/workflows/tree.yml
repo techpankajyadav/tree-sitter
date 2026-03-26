@@ -5,17 +5,37 @@ on:
 
 permissions:
   contents: write
+
+
 jobs:
   build:
-    name: Build ${{ matrix.language }} on ${{ matrix.os_config.os_name }}
+    name: Build ${{ matrix.grammar.lang }} on ${{ matrix.os_config.os_name }}
     runs-on: ${{ matrix.os_config.os }}
     strategy:
-      # This matrix creates a cross-product. 
-      # 5 languages * 3 OS configurations = 15 parallel build jobs!
+      # fail-fast: false ensures that if one language fails, the others keep building
+      fail-fast: false
       matrix:
-        # 1. ADD OR REMOVE YOUR LANGUAGES HERE
-        language: [json, python, javascript, rust, go, java]
-        
+        # 1. The exact languages and their official/community repository paths
+        grammar:
+          - { lang: json,       repo: "tree-sitter/tree-sitter-json" }
+          - { lang: python,     repo: "tree-sitter/tree-sitter-python" }
+          - { lang: javascript, repo: "tree-sitter/tree-sitter-javascript" }
+          - { lang: typescript, repo: "tree-sitter/tree-sitter-typescript" }
+          - { lang: rust,       repo: "tree-sitter/tree-sitter-rust" }
+          - { lang: go,         repo: "tree-sitter/tree-sitter-go" }
+          - { lang: java,       repo: "tree-sitter/tree-sitter-java" }
+          - { lang: c,          repo: "tree-sitter/tree-sitter-c" }
+          - { lang: cpp,        repo: "tree-sitter/tree-sitter-cpp" }
+          - { lang: yaml,       repo: "tree-sitter-grammars/tree-sitter-yaml" }
+          - { lang: toml,       repo: "tree-sitter-grammars/tree-sitter-toml" }
+          - { lang: xml,        repo: "tree-sitter-grammars/tree-sitter-xml" }
+          - { lang: html,       repo: "tree-sitter/tree-sitter-html" }
+          - { lang: css,        repo: "tree-sitter/tree-sitter-css" }
+          - { lang: sql,        repo: "m-novikov/tree-sitter-sql" }
+          - { lang: dockerfile, repo: "camdencheek/tree-sitter-dockerfile" }
+          - { lang: graphql,    repo: "bkegley/tree-sitter-graphql" }
+          - { lang: markdown,   repo: "tree-sitter-grammars/tree-sitter-markdown" }
+
         # 2. The OS configurations
         os_config:
           - { os: ubuntu-latest, os_name: linux,   ext: so,    compiler: gcc,   flags: "-shared -fPIC -O2" }
@@ -26,33 +46,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Download the source code for the specific language directly from the tree-sitter organization
+      # Clone the repository using the explicit 'repo' path from the matrix
       - name: Clone Language Grammar
-        run: git clone https://github.com/tree-sitter/tree-sitter-${{ matrix.language }}.git
+        run: git clone https://github.com/${{ matrix.grammar.repo }}.git repo-dir
 
-      # Compile the parser, automatically checking if a custom scanner exists
+      # Compile the parser, handling sub-folders and custom scanners
       - name: Compile Parser
         shell: bash
         run: |
-          cd tree-sitter-${{ matrix.language }}
+          cd repo-dir
           
-          # Start building the compile command
-          CMD="${{ matrix.os_config.compiler }} ${{ matrix.os_config.flags }} -I./src src/parser.c"
+          # Default source directory
+          SRC_DIR="src"
+          
+          # Custom routing for repos that hide their code in sub-folders
+          if [ "${{ matrix.grammar.lang }}" == "typescript" ]; then
+            SRC_DIR="typescript/src"
+          elif [ "${{ matrix.grammar.lang }}" == "markdown" ]; then
+            SRC_DIR="tree-sitter-markdown/src"
+          elif [ "${{ matrix.grammar.lang }}" == "xml" ]; then
+            SRC_DIR="xml/src"
+          fi
+          
+          # Start building the compile command using the routed SRC_DIR
+          CMD="${{ matrix.os_config.compiler }} ${{ matrix.os_config.flags }} -I./$SRC_DIR $SRC_DIR/parser.c"
           
           # If the language uses a C scanner, add it to the command
-          if [ -f "src/scanner.c" ]; then
+          if [ -f "$SRC_DIR/scanner.c" ]; then
             echo "Found scanner.c, adding to build..."
-            CMD="$CMD src/scanner.c"
+            CMD="$CMD $SRC_DIR/scanner.c"
           fi
           
           # If the language uses a C++ scanner, add it and link the C++ standard library
-          if [ -f "src/scanner.cc" ]; then
+          if [ -f "$SRC_DIR/scanner.cc" ]; then
             echo "Found scanner.cc, adding to build..."
-            CMD="$CMD src/scanner.cc -lstdc++"
+            CMD="$CMD $SRC_DIR/scanner.cc -lstdc++"
           fi
           
-          # Define the final output file name (e.g., tree-sitter-python.so)
-          OUTPUT_FILE="../tree-sitter-${{ matrix.language }}.${{ matrix.os_config.ext }}"
+          # Define the final output file name
+          OUTPUT_FILE="../tree-sitter-${{ matrix.grammar.lang }}.${{ matrix.os_config.ext }}"
           CMD="$CMD -o $OUTPUT_FILE"
           
           echo "Executing: $CMD"
@@ -66,3 +98,4 @@ jobs:
           name: "Latest Parsers"
           prerelease: true
           files: tree-sitter-${{ matrix.language }}.${{ matrix.os_config.ext }}
+      
